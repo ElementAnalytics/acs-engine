@@ -69,6 +69,7 @@ Here are the valid values for the orchestrator types:
 |tiller|true|1|Delivers the Helm server-side component: tiller. See https://github.com/kubernetes/helm for more info|
 |kubernetes-dashboard|true|1|Delivers the kubernetes dashboard component. See https://github.com/kubernetes/dashboard for more info|
 |rescheduler|false|1|Delivers the kubernetes rescheduler component|
+|cluster-autoscaler|false|1|Delivers the kubernetes cluster autoscaler component. See https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler/cloudprovider/azure for more info|
 
 To give a bit more info on the `addons` property: We've tried to expose the basic bits of data that allow useful configuration of these cluster features. Here are some example usage patterns that will unpack what `addons` provide:
 
@@ -102,7 +103,7 @@ As you can see above, `addons` is an array child property of `kubernetesConfig`.
 }
 ```
 
-More usefully, let's add some custom configuration to both of the above addons:
+More usefully, let's add some custom configuration to the above addons:
 
 ```
 "kubernetesConfig": {
@@ -131,6 +132,22 @@ More usefully, let's add some custom configuration to both of the above addons:
                   "memoryLimits": "512Mi"
                 }
               ]
+        },
+        {
+            "name": "cluster-autoscaler",
+            "containers": [
+              {
+                "name": "cluster-autoscaler",
+                "cpuRequests": "100m",
+                "memoryRequests": "300Mi",
+                "cpuLimits": "100m",
+                "memoryLimits": "300Mi"
+              }
+            ],
+            "config": {
+              "maxNodes": "5",
+              "minNodes": "1"
+            }
         }
     ]
 }
@@ -508,6 +525,13 @@ https://{keyvaultname}.vault.azure.net:443/secrets/{secretName}/{version}
 |clientId|yes, for Kubernetes clusters|describes the Azure client id.  It is recommended to use a separate client ID per cluster|
 |secret|yes, for Kubernetes clusters|describes the Azure client secret.  It is recommended to use a separate client secret per client id|
 |objectId|optional, for Kubernetes clusters|describes the Azure service principal object id.  It is required if enableEncryptionWithExternalKms is true|
+|keyvaultSecretRef.vaultId|no, for Kubernetes clusters|describes the vault id of the keyvault to retrieve the service principal secret from. See below for format.|
+|keyvaultSecretRef.secretName|no, for Kubernetes clusters|describes the name of the service principal secret in keyvault|
+|keyvaultSecretRef.version|no, for Kubernetes clusters|describes the version of the secret to use|
+
+
+format for `keyvaultSecretRef.vaultId`, can be obtained in cli, or found in the portal:
+`/subscriptions/<SUB_ID>/resourceGroups/<RG_NAME>/providers/Microsoft.KeyVault/vaults/<KV_NAME>`. See [keyvault params](../examples/keyvault-params/README.md#service-principal-profile) for an example.
 
 ## Cluster Defintions for apiVersion "2016-03-30"
 
@@ -562,12 +586,13 @@ For apiVersion "2016-03-30", a cluster may have only 1 agent pool profiles.
 |ssh.publicKeys[0].keyData|yes|The public SSH key used for authenticating access to all Linux nodes in the cluster.  Here are instructions for [generating a public/private key pair](ssh.md#ssh-key-generation)|
 ### aadProfile
 
-`linuxProfile` provides [AAD integration](kubernetes.aad.md) configuration for the cluster, currently only available for Kubernetes orchestrator.
+`aadProfile` provides [Azure Active Directory integration](kubernetes.aad.md) configuration for the cluster, currently only available for Kubernetes orchestrator.
 
 |Name|Required|Description|
 |---|---|---|
 |clientAppID|yes|Describes the client AAD application ID|
 |serverAppID|yes|Describes the server AAD application ID|
+|adminGroupID|no|Describes the AAD Group Object ID that will be assigned the cluster-admin RBAC role|
 |tenantID|no|Describes the AAD tenant ID to use for authentication. If not specified, will use the tenant of the deployment subscription|
 ### extensionProfiles
 A cluster can have 0 - N extensions in extension profiles.  Extension profiles allow a user to easily add pre-packaged functionality into a cluster.  An example would be configuring a monitoring solution on your cluster.  You can think of extensions like a marketplace for acs clusters.
