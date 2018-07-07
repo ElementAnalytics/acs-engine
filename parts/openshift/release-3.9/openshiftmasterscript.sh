@@ -31,13 +31,6 @@ else
 	COCKPIT_VERSION="latest"
 fi
 
-# TODO: with WALinuxAgent>=v2.2.21 (https://github.com/Azure/WALinuxAgent/pull/1005)
-# we should be able to append context=system_u:object_r:container_var_lib_t:s0
-# to ResourceDisk.MountOptions in /etc/waagent.conf and remove this stanza.
-systemctl stop docker.service
-restorecon -R /var/lib/docker
-systemctl start docker.service
-
 echo "BOOTSTRAP_CONFIG_NAME=node-config-master" >>/etc/sysconfig/${SERVICE_TYPE}-node
 
 for dst in tcp,2379 tcp,2380 tcp,8443 tcp,8444 tcp,8053 udp,8053 tcp,9090; do
@@ -54,9 +47,14 @@ sed -i -e "s#--loglevel=2#--loglevel=4#" /etc/sysconfig/${SERVICE_TYPE}-master-c
 
 rm -rf /etc/etcd/* /etc/origin/master/* /etc/origin/node/*
 
+MASTER_OREG_URL="$IMAGE_PREFIX/$IMAGE_TYPE"
+if [[ -f /etc/origin/oreg_url ]]; then
+	MASTER_OREG_URL=$(cat /etc/origin/oreg_url)
+fi
+
 oc adm create-bootstrap-policy-file --filename=/etc/origin/master/policy.json
 
-( cd / && base64 -d <<< {{ .ConfigBundle }} | tar -xz)
+( cd / && base64 -d <<< {{ .ConfigBundle | shellQuote }} | tar -xz)
 
 cp /etc/origin/node/ca.crt /etc/pki/ca-trust/source/anchors/openshift-ca.crt
 update-ca-trust
@@ -78,7 +76,7 @@ set -x
 ###
 # retrieve the public ip via dns for the router public ip and sub it in for the routingConfig.subdomain
 ###
-routerLBHost="{{.RouterLBHostname}}"
+routerLBHost={{ .RouterLBHostname | shellQuote }}
 routerLBIP=$(dig +short $routerLBHost)
 
 # NOTE: The version of openshift-ansible for origin defaults the ansible var
@@ -101,6 +99,7 @@ for i in /etc/origin/master/master-config.yaml /tmp/bootstrapconfigs/* /tmp/ansi
     sed -i "s|COCKPIT_VERSION|${COCKPIT_VERSION}|g; s|COCKPIT_BASENAME|${COCKPIT_BASENAME}|g; s|COCKPIT_PREFIX|${COCKPIT_PREFIX}|g;" $i
     sed -i "s|VERSION|${VERSION}|g; s|SHORT_VER|${VERSION%.*}|g; s|SERVICE_TYPE|${SERVICE_TYPE}|g; s|IMAGE_TYPE|${IMAGE_TYPE}|g" $i
     sed -i "s|HOSTNAME|${HOSTNAME}|g;" $i
+    sed -i "s|MASTER_OREG_URL|${MASTER_OREG_URL}|g" $i
 done
 
 # note: ${SERVICE_TYPE}-node crash loops until master is up
@@ -132,7 +131,7 @@ metadata:
 provisioner: kubernetes.io/azure-disk
 parameters:
   skuName: Premium_LRS
-  location: {{ .Location }}
+  location: {{ .Location | quote }}
   kind: managed
 EOF
 
