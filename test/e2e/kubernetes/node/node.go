@@ -15,7 +15,7 @@ import (
 
 const (
 	//ServerVersion is used to parse out the version of the API running
-	ServerVersion = `(Server Version:\s)+(v\d+.\d+.\d+)+`
+	ServerVersion = `(Server Version:\s)+(.*)`
 )
 
 // Node represents the kubernetes Node Resource
@@ -96,7 +96,7 @@ func WaitOnReady(nodeCount int, sleep, duration time.Duration) bool {
 			case <-ctx.Done():
 				errCh <- fmt.Errorf("Timeout exceeded (%s) while waiting for Nodes to become ready", duration.String())
 			default:
-				if AreAllReady(nodeCount) == true {
+				if AreAllReady(nodeCount) {
 					readyCh <- true
 				}
 				time.Sleep(sleep)

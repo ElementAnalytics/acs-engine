@@ -22,95 +22,98 @@
       "type": "string"
     },
 {{else}}
+{{if not IsOpenShift}}
     "etcdServerCertificate": {
       "metadata": {
         "description": "The base 64 server certificate used on the master"
-      }, 
+      },
       "type": "string"
-    }, 
+    },
     "etcdServerPrivateKey": {
       "metadata": {
         "description": "The base 64 server private key used on the master."
-      }, 
+      },
       "type": "securestring"
-    }, 
+    },
     "etcdClientCertificate": {
       "metadata": {
         "description": "The base 64 server certificate used on the master"
-      }, 
+      },
       "type": "string"
-    }, 
+    },
     "etcdClientPrivateKey": {
       "metadata": {
         "description": "The base 64 server private key used on the master."
-      }, 
+      },
       "type": "securestring"
     },
     "etcdPeerCertificate0": {
       "metadata": {
         "description": "The base 64 server certificates used on the master"
-      }, 
+      },
       "type": "string"
     },
     "etcdPeerPrivateKey0": {
       "metadata": {
         "description": "The base 64 server private keys used on the master."
-      }, 
+      },
       "type": "securestring"
     },
     {{if ge .MasterProfile.Count 3}}
       "etcdPeerCertificate1": {
         "metadata": {
           "description": "The base 64 server certificates used on the master"
-        }, 
+        },
         "type": "string"
-      }, 
+      },
       "etcdPeerCertificate2": {
         "metadata": {
           "description": "The base 64 server certificates used on the master"
-        }, 
+        },
         "type": "string"
       },
       "etcdPeerPrivateKey1": {
         "metadata": {
           "description": "The base 64 server private keys used on the master."
-        }, 
+        },
         "type": "securestring"
       },
       "etcdPeerPrivateKey2": {
         "metadata": {
           "description": "The base 64 server private keys used on the master."
-        }, 
+        },
         "type": "securestring"
       },
       {{if ge .MasterProfile.Count 5}}
         "etcdPeerCertificate3": {
           "metadata": {
             "description": "The base 64 server certificates used on the master"
-          }, 
+          },
           "type": "string"
-        }, 
+        },
         "etcdPeerCertificate4": {
           "metadata": {
             "description": "The base 64 server certificates used on the master"
-          }, 
+          },
           "type": "string"
         },
         "etcdPeerPrivateKey3": {
           "metadata": {
             "description": "The base 64 server private keys used on the master."
-          }, 
+          },
           "type": "securestring"
         },
         "etcdPeerPrivateKey4": {
           "metadata": {
             "description": "The base 64 server private keys used on the master."
-          }, 
+          },
           "type": "securestring"
         },
       {{end}}
     {{end}}
 {{end}}
+{{end}}
+{{if not IsOpenShift}}
     "apiServerCertificate": {
       "metadata": {
         "description": "The base 64 server certificate used on the master"
@@ -160,6 +163,7 @@
       },
       "type": "securestring"
     },
+{{end}}
     "generatorCode": {
       {{PopulateClassicModeDefaultValue "generatorCode"}}
       "metadata": {
@@ -293,6 +297,20 @@
       },
       "type": "string"
     },
+    "kubernetesMetricsServerSpec": {
+      {{PopulateClassicModeDefaultValue "kubernetesMetricsServerSpec"}}
+      "metadata": {
+        "description": "The container spec for Metrics Server."
+      },
+      "type": "string"
+    },
+    "kubernetesNVIDIADevicePluginSpec": {
+      {{PopulateClassicModeDefaultValue "kubernetesNVIDIADevicePluginSpec"}}
+      "metadata": {
+        "description": "The container spec for NVIDIA Device Plugin."
+      },
+      "type": "string"
+    },
     "kubernetesTillerSpec": {
       {{PopulateClassicModeDefaultValue "kubernetesTillerSpec"}}
       "metadata": {
@@ -335,45 +353,17 @@
       },
       "type": "string"
     },
+    "kubernetesACIConnectorEnabled": {
+      "defaultValue": false,
+      "metadata": {
+        "description": "ACI Connector Status"
+      },
+      "type": "bool"
+    },
     "kubernetesACIConnectorSpec": {
       {{PopulateClassicModeDefaultValue "kubernetesACIConnectorSpec"}}
       "metadata": {
         "description": "The container spec for ACI Connector."
-      },
-      "type": "string"
-    },
-    "kubernetesACIConnectorClientId": {
-      {{PopulateClassicModeDefaultValue "kubernetesACIConnectorClientId"}}
-      "metadata": {
-        "description": "Client id for ACI Connector."
-      },
-      "type": "string"
-    },
-    "kubernetesACIConnectorClientKey": {
-      {{PopulateClassicModeDefaultValue "kubernetesACIConnectorClientKey"}}
-      "metadata": {
-        "description": "Client key for ACI Connector."
-      },
-      "type": "string"
-    },
-    "kubernetesACIConnectorTenantId": {
-      {{PopulateClassicModeDefaultValue "kubernetesACIConnectorTenantId"}}
-      "metadata": {
-        "description": "Tenant id for ACI Connector."
-      },
-      "type": "string"
-    },
-    "kubernetesACIConnectorSubscriptionId": {
-      {{PopulateClassicModeDefaultValue "kubernetesACIConnectorSubscriptionId"}}
-      "metadata": {
-        "description": "Subscription id for ACI Connector."
-      },
-      "type": "string"
-    },
-    "kubernetesACIConnectorResourceGroup": {
-      {{PopulateClassicModeDefaultValue "kubernetesACIConnectorResourceGroup"}}
-      "metadata": {
-        "description": "Resource group for ACI Connector."
       },
       "type": "string"
     },
@@ -430,6 +420,69 @@
       {{PopulateClassicModeDefaultValue "kubernetesACIConnectorMemoryLimit"}}
       "metadata": {
         "description": "ACI Connector Memory Limit"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerSpec": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerSpec"}}
+      "metadata": {
+        "description": "The container spec for the cluster autoscaler."
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerCPULimit": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerCPULimit"}}
+      "metadata": {
+        "description": "Cluster autoscaler cpu limit"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerMemoryLimit": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerMemoryLimit"}}
+      "metadata": {
+        "description": "Cluster autoscaler memory limit"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerCPURequests": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerCPURequests"}}
+      "metadata": {
+        "description": "Cluster autoscaler cpu requests"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerMemoryRequests": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerMemoryRequests"}}
+      "metadata": {
+        "description": "Cluster autoscaler memory requests"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerMinNodes": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerMinNodes"}}
+      "metadata": {
+        "description": "Cluster autoscaler min nodes"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerMaxNodes": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerMaxNodes"}}
+      "metadata": {
+        "description": "Cluster autoscaler max nodes"
+      },
+      "type": "string"
+    },
+    "kubernetesClusterAutoscalerEnabled": {
+      "defaultValue": false,
+      "metadata": {
+        "description": "Cluster autoscaler status"
+      },
+      "type": "bool"
+    },
+    "kubernetesClusterAutoscalerUseManagedIdentity": {
+      {{PopulateClassicModeDefaultValue "kubernetesClusterAutoscalerUseManagedIdentity"}}
+      "metadata": {
+        "description": "Managed identity for the cluster autoscaler addon"
       },
       "type": "string"
     },
@@ -545,6 +598,7 @@
       },
       "type": "string"
     },
+    {{if not IsOpenShift}}
     "dockerEngineDownloadRepo": {
       "defaultValue": "https://aptdocker.azureedge.net/repo",
       "metadata": {
@@ -567,26 +621,43 @@
        ],
       "type": "string"
     },
+    {{end}}
     "networkPolicy": {
       "defaultValue": "{{.OrchestratorProfile.KubernetesConfig.NetworkPolicy}}",
       "metadata": {
-        "description": "The network policy enforcement to use (none|azure|calico)"
+        "description": "The network policy enforcement to use (calico|cilium); 'none' and 'azure' here for backwards compatibility"
       },
       "allowedValues": [
+        "",
         "none",
         "azure",
-        "calico"
+        "calico",
+        "cilium"
+      ],
+      "type": "string"
+    },
+    "networkPlugin": {
+      "defaultValue": "{{.OrchestratorProfile.KubernetesConfig.NetworkPlugin}}",
+      "metadata": {
+        "description": "The network plugin to use for Kubernetes (kubenet|azure|flannel|cilium)"
+      },
+      "allowedValues": [
+        "kubenet",
+        "azure",
+        "flannel",
+        "cilium"
       ],
       "type": "string"
     },
     "containerRuntime": {
       "defaultValue": "{{.OrchestratorProfile.KubernetesConfig.ContainerRuntime}}",
       "metadata": {
-        "description": "The container runtime to use (docker|clear-containers)"
+        "description": "The container runtime to use (docker|clear-containers|containerd)"
       },
       "allowedValues": [
         "docker",
-        "clear-containers"
+        "clear-containers",
+        "containerd"
       ],
       "type": "string"
     },
@@ -603,9 +674,9 @@
       "type": "string"
     },
     "maxPods": {
-      "defaultValue": 110,
+      "defaultValue": 30,
       "metadata": {
-        "description": "The maximum number of pods per node."
+        "description": "This param has been deprecated."
       },
       "type": "int"
     },
@@ -629,6 +700,69 @@
         "description": "Low Threshold for Image Garbage collection on each node."
       },
       "type": "int"
+    },
+    "omsAgentVersion": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS agent version for Container Monitoring."
+      },
+      "type": "string"
+    },
+    "omsAgentDockerProviderVersion": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "Docker provider version for Container Monitoring."
+      },
+      "type": "string"
+    },
+    "omsAgentImage": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS agent image for Container Monitoring."
+      },
+      "type": "string"
+    },
+    "omsAgentWorkspaceGuid": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS workspace guid"
+      },
+      "type": "string"
+    },
+    "omsAgentWorkspaceKey": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS workspace key"
+      },
+      "type": "string"
+    },
+    "kubernetesOMSAgentCPURequests": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS Agent CPU requests resource limit"
+      },
+      "type": "string"
+    },
+    "kubernetesOMSAgentMemoryRequests": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS Agent memory requests resource limit"
+      },
+      "type": "string"
+    },
+    "kubernetesOMSAgentCPULimit": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS Agent CPU limit resource limit"
+      },
+      "type": "string"
+    },
+    "kubernetesOMSAgentMemoryLimit": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "OMS Agent memory limit resource limit"
+      },
+      "type": "string"
     },
 {{ if not UseManagedIdentity }}
     "servicePrincipalClientId": {
@@ -678,4 +812,114 @@
         "description": "etcd version"
       },
       "type": "string"
+    },
+    "etcdEncryptionKey": {
+      "metadata": {
+        "description": "Encryption at rest key for etcd"
+      },
+      "type": "string"
     }
+{{if ProvisionJumpbox}}
+    ,"jumpboxVMName": {
+      "metadata": {
+        "description": "jumpbox VM Name"
+      },
+      "type": "string"
+    },
+    "jumpboxVMSize": {
+      {{GetMasterAllowedSizes}}
+      "metadata": {
+        "description": "The size of the Virtual Machine. Required"
+      },
+      "type": "string"
+    },
+    "jumpboxOSDiskSizeGB": {
+      {{PopulateClassicModeDefaultValue "jumpboxOSDiskSizeGB"}}
+      "metadata": {
+        "description": "Size in GB to allocate to the private cluster jumpbox VM OS."
+      },
+      "type": "int"
+    },
+    "jumpboxPublicKey": {
+      "metadata": {
+        "description": "SSH public key used for auth to the private cluster jumpbox"
+      },
+      "type": "string"
+    },
+    "jumpboxUsername": {
+      "metadata": {
+        "description": "Username for the private cluster jumpbox"
+      },
+      "type": "string"
+    },
+    "jumpboxStorageProfile": {
+      "metadata": {
+        "description": "Storage Profile for the private cluster jumpbox"
+      },
+      "type": "string"
+    }
+{{end}}
+{{if HasCustomSearchDomain}}
+    ,"searchDomainName": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "Custom Search Domain name."
+      },
+      "type": "string"
+    },
+    "searchDomainRealmUser": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "Windows server AD user name to join the Linux Machines with active directory and be able to change dns registries."
+      },
+      "type": "string"
+    },
+    "searchDomainRealmPassword": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "Windows server AD user password to join the Linux Machines with active directory and be able to change dns registries."
+      },
+      "type": "securestring"
+    }
+{{end}}
+{{if HasCustomNodesDNS}}
+    ,"dnsServer": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "DNS Server IP"
+      },
+      "type": "string"
+    }
+{{end}}
+
+{{if EnableEncryptionWithExternalKms}}
+   ,
+   {{if not UseManagedIdentity}}
+   "servicePrincipalObjectId": {
+      "metadata": {
+        "description": "Object ID (used by cloudprovider)"
+      },
+      "type": "securestring"
+    },
+    {{end}}
+    "clusterKeyVaultSku": {
+       "type": "string",
+       "defaultValue": "Standard",
+       "allowedValues": [
+         "Standard",
+         "Premium"
+       ],
+       "metadata": {
+         "description": "SKU for the key vault used by the cluster"
+       }
+     }
+ {{end}}
+ {{if IsAzureCNI}}
+    ,"AzureCNINetworkMonitorImageURL": {
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure CNI networkmonitor Image URL"
+      },
+      "type": "string"
+    }
+ {{end}}

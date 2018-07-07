@@ -41,6 +41,11 @@
     {{range $index, $agent := .AgentPoolProfiles}}
         "{{.Name}}Index": {{$index}},
         {{template "k8s/kubernetesagentvars.t" .}}
+        {{if IsNSeriesSKU .}}
+          {{if IsNVIDIADevicePluginEnabled}}
+          "registerWithGpuTaints": "nvidia.com/gpu=true:NoSchedule",
+          {{end}}
+        {{end}}
         {{if .IsStorageAccount}}
           {{if .HasDisks}}
             "{{.Name}}DataAccountName": "[concat(variables('storageAccountBaseName'), 'data{{$index}}')]",
@@ -51,63 +56,76 @@
     {{template "k8s/kubernetesmastervars.t" .}}
   },
   "resources": [
+    {{if IsOpenShift}}
+      {{template "openshift/infraresources.t" .}}
+    {{end}}
     {{ range $index, $element := .AgentPoolProfiles}}
       {{if $index}}, {{end}}
       {{if .IsWindows}}
-        {{template "k8s/kuberneteswinagentresourcesvmas.t" .}}
+        {{if .IsVirtualMachineScaleSets}}
+          {{template "k8s/kuberneteswinagentresourcesvmss.t" .}}
+        {{else}}
+          {{template "k8s/kuberneteswinagentresourcesvmas.t" .}}
+        {{end}}
       {{else}}
-        {{template "k8s/kubernetesagentresourcesvmas.t" .}}
+        {{if .IsVirtualMachineScaleSets}}
+          {{template "k8s/kubernetesagentresourcesvmss.t" .}}
+        {{else}}
+          {{template "k8s/kubernetesagentresourcesvmas.t" .}}
+        {{end}}
       {{end}}
     {{end}}
     {{if not IsHostedMaster}}
       ,{{template "k8s/kubernetesmasterresources.t" .}}
     {{else}}
-    ,{
-      "apiVersion": "[variables('apiVersionDefault')]",
-      "dependsOn": [
-        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsgName'))]"
-    {{if not IsAzureCNI}}
-        ,
-        "[concat('Microsoft.Network/routeTables/', variables('routeTableName'))]"
-    {{end}}
-      ],
-      "location": "[variables('location')]",
-      "name": "[variables('virtualNetworkName')]",
-      "properties": {
-        "addressSpace": {
-          "addressPrefixes": [
-            "[variables('vnetCidr')]"
+      {{if not IsCustomVNET}}
+      ,{
+        "apiVersion": "[variables('apiVersionDefault')]",
+        "dependsOn": [
+          "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsgName'))]"
+      {{if not IsAzureCNI}}
+          ,
+          "[concat('Microsoft.Network/routeTables/', variables('routeTableName'))]"
+      {{end}}
+        ],
+        "location": "[variables('location')]",
+        "name": "[variables('virtualNetworkName')]",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "[variables('vnetCidr')]"
+            ]
+          },
+          "subnets": [
+            {
+              "name": "[variables('subnetName')]",
+              "properties": {
+                "addressPrefix": "[variables('subnet')]",
+                "networkSecurityGroup": {
+                  "id": "[variables('nsgID')]"
+                }
+      {{if not IsAzureCNI}}
+                ,
+                "routeTable": {
+                  "id": "[variables('routeTableID')]"
+                }
+      {{end}}
+              }
+            }
           ]
         },
-        "subnets": [
-          {
-            "name": "[variables('subnetName')]",
-            "properties": {
-              "addressPrefix": "[variables('subnet')]",
-              "networkSecurityGroup": {
-                "id": "[variables('nsgID')]"
-              }
-    {{if not IsAzureCNI}}
-              ,
-              "routeTable": {
-                "id": "[variables('routeTableID')]"
-              }
+        "type": "Microsoft.Network/virtualNetworks"
+      }
     {{end}}
-            }
-          }
-        ]
-      },
-      "type": "Microsoft.Network/virtualNetworks"
-    },
     {{if not IsAzureCNI}}
-    {
+    ,{
       "apiVersion": "[variables('apiVersionDefault')]",
       "location": "[variables('location')]",
       "name": "[variables('routeTableName')]",
       "type": "Microsoft.Network/routeTables"
-    },
+    }
     {{end}}
-    {
+    ,{
       "apiVersion": "[variables('apiVersionDefault')]",
       "location": "[variables('location')]",
       "name": "[variables('nsgName')]",
@@ -115,20 +133,20 @@
         "securityRules": [
 {{if .HasWindows}}
           {
-            "name": "allow_rdp", 
+            "name": "allow_rdp",
             "properties": {
-              "access": "Allow", 
-              "description": "Allow RDP traffic to master", 
-              "destinationAddressPrefix": "*", 
-              "destinationPortRange": "3389-3389", 
-              "direction": "Inbound", 
-              "priority": 102, 
-              "protocol": "Tcp", 
-              "sourceAddressPrefix": "*", 
+              "access": "Allow",
+              "description": "Allow RDP traffic to master",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "3389-3389",
+              "direction": "Inbound",
+              "priority": 102,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
               "sourcePortRange": "*"
             }
           },
-{{end}}       
+{{end}}
           {
             "name": "allow_ssh",
             "properties": {

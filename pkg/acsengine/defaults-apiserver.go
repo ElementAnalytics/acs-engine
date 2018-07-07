@@ -4,12 +4,13 @@ import (
 	"strconv"
 
 	"github.com/Azure/acs-engine/pkg/api"
+	"github.com/Azure/acs-engine/pkg/api/common"
 	"github.com/Azure/acs-engine/pkg/helpers"
 )
 
 func setAPIServerConfig(cs *api.ContainerService) {
 	o := cs.Properties.OrchestratorProfile
-	staticLinuxAPIServerConfig := map[string]string{
+	staticAPIServerConfig := map[string]string{
 		"--bind-address":               "0.0.0.0",
 		"--advertise-address":          "<kubernetesAPIServerIP>",
 		"--allow-privileged":           "true",
@@ -22,7 +23,6 @@ func setAPIServerConfig(cs *api.ContainerService) {
 		"--etcd-certfile":              "/etc/kubernetes/certs/etcdclient.crt",
 		"--etcd-keyfile":               "/etc/kubernetes/certs/etcdclient.key",
 		"--etcd-servers":               "https://127.0.0.1:" + strconv.Itoa(DefaultMasterEtcdClientPort),
-		"--etcd-quorum-read":           "true",
 		"--tls-cert-file":              "/etc/kubernetes/certs/apiserver.crt",
 		"--tls-private-key-file":       "/etc/kubernetes/certs/apiserver.key",
 		"--client-ca-file":             "/etc/kubernetes/certs/ca.crt",
@@ -36,73 +36,64 @@ func setAPIServerConfig(cs *api.ContainerService) {
 		"--v":                          "4",
 	}
 
-	// Data Encryption at REST configuration
-	if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnableDataEncryptionAtRest) {
-		staticLinuxAPIServerConfig["--experimental-encryption-provider-config"] = "/etc/kubernetes/encryption-config.yaml"
-	}
-
-	// Aggregated API configuration
-	if o.KubernetesConfig.EnableAggregatedAPIs || isKubernetesVersionGe(o.OrchestratorVersion, "1.9.0") {
-		staticLinuxAPIServerConfig["--requestheader-client-ca-file"] = "/etc/kubernetes/certs/proxy-ca.crt"
-		staticLinuxAPIServerConfig["--proxy-client-cert-file"] = "/etc/kubernetes/certs/proxy.crt"
-		staticLinuxAPIServerConfig["--proxy-client-key-file"] = "/etc/kubernetes/certs/proxy.key"
-		staticLinuxAPIServerConfig["--requestheader-allowed-names"] = ""
-		staticLinuxAPIServerConfig["--requestheader-extra-headers-prefix"] = "X-Remote-Extra-"
-		staticLinuxAPIServerConfig["--requestheader-group-headers"] = "X-Remote-Group"
-		staticLinuxAPIServerConfig["--requestheader-username-headers"] = "X-Remote-User"
-	}
-
-	// Enable cloudprovider if we're not using cloud controller manager
-	if !helpers.IsTrueBoolPointer(o.KubernetesConfig.UseCloudControllerManager) {
-		staticLinuxAPIServerConfig["--cloud-provider"] = "azure"
-		staticLinuxAPIServerConfig["--cloud-config"] = "/etc/kubernetes/azure.json"
-	}
-
-	// AAD configuration
-	if cs.Properties.HasAadProfile() {
-		staticLinuxAPIServerConfig["--oidc-username-claim"] = "oid"
-		staticLinuxAPIServerConfig["--oidc-groups-claim"] = "groups"
-		staticLinuxAPIServerConfig["--oidc-client-id"] = "spn:" + cs.Properties.AADProfile.ServerAppID
-		issuerHost := "sts.windows.net"
-		if GetCloudTargetEnv(cs.Location) == "AzureChinaCloud" {
-			issuerHost = "sts.chinacloudapi.cn"
-		}
-		staticLinuxAPIServerConfig["--oidc-issuer-url"] = "https://" + issuerHost + "/" + cs.Properties.AADProfile.TenantID + "/"
-	}
-
-	// Audit Policy configuration
-	if isKubernetesVersionGe(o.OrchestratorVersion, "1.8.0") {
-		staticLinuxAPIServerConfig["--audit-policy-file"] = "/etc/kubernetes/manifests/audit-policy.yaml"
-	}
-
-	staticWindowsAPIServerConfig := make(map[string]string)
-	for key, val := range staticLinuxAPIServerConfig {
-		staticWindowsAPIServerConfig[key] = val
-	}
-	// Windows apiserver config overrides
-	// TODO placeholder for specific config overrides for Windows clusters
-
 	// Default apiserver config
 	defaultAPIServerConfig := map[string]string{
-		"--admission-control":   "NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota,DenyEscalatingExec,AlwaysPullImages",
 		"--audit-log-maxage":    "30",
 		"--audit-log-maxbackup": "10",
 		"--audit-log-maxsize":   "100",
 	}
 
+	// Data Encryption at REST configuration conditions
+	if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnableDataEncryptionAtRest) || helpers.IsTrueBoolPointer(o.KubernetesConfig.EnableEncryptionWithExternalKms) {
+		staticAPIServerConfig["--experimental-encryption-provider-config"] = "/etc/kubernetes/encryption-config.yaml"
+	}
+
+	// Aggregated API configuration
+	if o.KubernetesConfig.EnableAggregatedAPIs || common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.9.0") {
+		defaultAPIServerConfig["--requestheader-client-ca-file"] = "/etc/kubernetes/certs/proxy-ca.crt"
+		defaultAPIServerConfig["--proxy-client-cert-file"] = "/etc/kubernetes/certs/proxy.crt"
+		defaultAPIServerConfig["--proxy-client-key-file"] = "/etc/kubernetes/certs/proxy.key"
+		defaultAPIServerConfig["--requestheader-allowed-names"] = ""
+		defaultAPIServerConfig["--requestheader-extra-headers-prefix"] = "X-Remote-Extra-"
+		defaultAPIServerConfig["--requestheader-group-headers"] = "X-Remote-Group"
+		defaultAPIServerConfig["--requestheader-username-headers"] = "X-Remote-User"
+	}
+
+	// Enable cloudprovider if we're not using cloud controller manager
+	if !helpers.IsTrueBoolPointer(o.KubernetesConfig.UseCloudControllerManager) {
+		staticAPIServerConfig["--cloud-provider"] = "azure"
+		staticAPIServerConfig["--cloud-config"] = "/etc/kubernetes/azure.json"
+	}
+
+	// AAD configuration
+	if cs.Properties.HasAadProfile() {
+		defaultAPIServerConfig["--oidc-username-claim"] = "oid"
+		defaultAPIServerConfig["--oidc-groups-claim"] = "groups"
+		defaultAPIServerConfig["--oidc-client-id"] = "spn:" + cs.Properties.AADProfile.ServerAppID
+		issuerHost := "sts.windows.net"
+		if getCloudTargetEnv(cs.Location) == "AzureChinaCloud" {
+			issuerHost = "sts.chinacloudapi.cn"
+		}
+		defaultAPIServerConfig["--oidc-issuer-url"] = "https://" + issuerHost + "/" + cs.Properties.AADProfile.TenantID + "/"
+	}
+
+	// Audit Policy configuration
+	if common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.8.0") {
+		defaultAPIServerConfig["--audit-policy-file"] = "/etc/kubernetes/addons/audit-policy.yaml"
+	}
+
 	// RBAC configuration
 	if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnableRbac) {
-		if isKubernetesVersionGe(o.OrchestratorVersion, "1.7.0") {
+		if common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.7.0") {
 			defaultAPIServerConfig["--authorization-mode"] = "Node,RBAC"
 		} else {
 			defaultAPIServerConfig["--authorization-mode"] = "RBAC"
 		}
 	}
 
-	// Pod Security Policy configuration
-	if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnablePodSecurityPolicy) {
-		defaultAPIServerConfig["--admission-control"] = defaultAPIServerConfig["--admission-control"] + ",PodSecurityPolicy"
-	}
+	// Set default admission controllers
+	admissionControlKey, admissionControlValues := getDefaultAdmissionControls(cs)
+	defaultAPIServerConfig[admissionControlKey] = admissionControlValues
 
 	// If no user-configurable apiserver config values exists, use the defaults
 	if o.KubernetesConfig.APIServerConfig == nil {
@@ -119,13 +110,7 @@ func setAPIServerConfig(cs *api.ContainerService) {
 
 	// We don't support user-configurable values for the following,
 	// so any of the value assignments below will override user-provided values
-	var overrideAPIServerConfig map[string]string
-	if cs.Properties.HasWindows() {
-		overrideAPIServerConfig = staticWindowsAPIServerConfig
-	} else {
-		overrideAPIServerConfig = staticLinuxAPIServerConfig
-	}
-	for key, val := range overrideAPIServerConfig {
+	for key, val := range staticAPIServerConfig {
 		o.KubernetesConfig.APIServerConfig[key] = val
 	}
 
@@ -135,4 +120,38 @@ func setAPIServerConfig(cs *api.ContainerService) {
 			delete(o.KubernetesConfig.APIServerConfig, key)
 		}
 	}
+
+	// Enforce flags removal that don't work with specific versions, to accommodate upgrade
+	// Remove flags that are not compatible with 1.10
+	if common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.10.0") {
+		for _, key := range []string{"--admission-control"} {
+			delete(o.KubernetesConfig.APIServerConfig, key)
+		}
+	}
+}
+
+func getDefaultAdmissionControls(cs *api.ContainerService) (string, string) {
+	o := cs.Properties.OrchestratorProfile
+	admissionControlKey := "--enable-admission-plugins"
+	var admissionControlValues string
+
+	// --admission-control was used in v1.9 and earlier and was deprecated in 1.10
+	if !common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.10.0") {
+		admissionControlKey = "--admission-control"
+	}
+
+	// Add new version case when applying admission controllers only available in that version or later
+	switch {
+	case common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.9.0"):
+		admissionControlValues = "NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota,AlwaysPullImages,ExtendedResourceToleration"
+	default:
+		admissionControlValues = "NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota,AlwaysPullImages"
+	}
+
+	// Pod Security Policy configuration
+	if helpers.IsTrueBoolPointer(o.KubernetesConfig.EnablePodSecurityPolicy) {
+		admissionControlValues += ",PodSecurityPolicy"
+	}
+
+	return admissionControlKey, admissionControlValues
 }

@@ -47,6 +47,7 @@ type Properties struct {
 type ServicePrincipalProfile struct {
 	ClientID string `json:"clientId,omitempty"`
 	Secret   string `json:"secret,omitempty"`
+	ObjectID string `json:"objectId,omitempty"`
 }
 
 // CustomProfile specifies custom properties that are used for
@@ -175,7 +176,7 @@ func (a *AgentPoolProfile) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// JumpboxProfile dscribes properties of the jumpbox setup
+// JumpboxProfile describes properties of the jumpbox setup
 // in the ACS container cluster.
 type JumpboxProfile struct {
 	OSType    OSType `json:"osType,omitempty"`

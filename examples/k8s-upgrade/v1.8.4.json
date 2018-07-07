@@ -6,25 +6,22 @@
       "orchestratorVersion": "1.8.4"
     },
     "masterProfile": {
-      "count": 1,
+      "count": 3,
       "dnsPrefix": "",
-      "vmSize": "Standard_D2_v2",
-      "storageProfile" : "ManagedDisks"
+      "vmSize": "Standard_D2_v2"
     },
     "agentPoolProfiles": [
       {
         "name": "agentpool1",
         "count": 2,
         "vmSize": "Standard_D2_v2",
-        "availabilityProfile": "AvailabilitySet",
-        "storageProfile" : "ManagedDisks"
+        "availabilityProfile": "AvailabilitySet"
       },
       {
         "name": "agentpool2",
         "count": 1,
         "vmSize": "Standard_D2_v2",
-        "availabilityProfile": "AvailabilitySet",
-        "storageProfile" : "ManagedDisks"
+        "availabilityProfile": "AvailabilitySet"
       }
     ],
     "linuxProfile": {

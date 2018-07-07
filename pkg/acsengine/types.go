@@ -36,8 +36,13 @@ type DockerSpecConfig struct {
 type DCOSSpecConfig struct {
 	DCOS188BootstrapDownloadURL     string
 	DCOS190BootstrapDownloadURL     string
+	DCOS198BootstrapDownloadURL     string
 	DCOS110BootstrapDownloadURL     string
+	DCOS111BootstrapDownloadURL     string
 	DCOSWindowsBootstrapDownloadURL string
+	DcosRepositoryURL               string // For custom install, for example CI, need these three addributes
+	DcosClusterPackageListID        string // the id of the package list file
+	DcosProviderPackageID           string // the id of the dcos-provider-xxx package
 }
 
 //KubernetesSpecConfig is the kubernetes container images used.
@@ -45,6 +50,8 @@ type KubernetesSpecConfig struct {
 	KubernetesImageBase              string
 	TillerImageBase                  string
 	ACIConnectorImageBase            string
+	NVIDIAImageBase                  string
+	AzureCNIImageBase                string
 	EtcdDownloadURLBase              string
 	KubeBinariesSASURLBase           string
 	WindowsPackageSASURLBase         string
@@ -80,3 +87,17 @@ type AzureEnvironmentSpecConfig struct {
 type Context struct {
 	Translator *i18n.Translator
 }
+
+// KeyVaultID represents a KeyVault instance on Azure
+type KeyVaultID struct {
+	ID string `json:"id"`
+}
+
+// KeyVaultRef represents a reference to KeyVault instance on Azure
+type KeyVaultRef struct {
+	KeyVault      KeyVaultID `json:"keyVault"`
+	SecretName    string     `json:"secretName"`
+	SecretVersion string     `json:"secretVersion,omitempty"`
+}
+
+type paramsMap map[string]interface{}

@@ -1,83 +1,57 @@
 package common
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
-func Test_GetValidPatchVersion(t *testing.T) {
-	version := GetValidPatchVersion(Kubernetes, "")
-	if version != KubernetesDefaultVersion {
-		t.Errorf("It is not the default Kubernetes version")
+func TestValidateDNSPrefix(t *testing.T) {
+	cases := []struct {
+		dnsPrefix   string
+		expectedErr error
+	}{
+		{
+			"validDnsPrefix",
+			nil,
+		},
+		{
+			"",
+			fmt.Errorf("DNSPrefix '' is invalid. The DNSPrefix must contain between 3 and 45 characters and can contain only letters, numbers, and hyphens.  It must start with a letter and must end with a letter or a number. (length was 0)"),
+		},
+		{
+			"a",
+			fmt.Errorf("DNSPrefix 'a' is invalid. The DNSPrefix must contain between 3 and 45 characters and can contain only letters, numbers, and hyphens.  It must start with a letter and must end with a letter or a number. (length was 1)"),
+		},
+		{
+			"1234",
+			fmt.Errorf("DNSPrefix '1234' is invalid. The DNSPrefix must contain between 3 and 45 characters and can contain only letters, numbers, and hyphens.  It must start with a letter and must end with a letter or a number. (length was 4)"),
+		},
+		{
+			"verylongdnsprefixthatismorethan45characterslong",
+			fmt.Errorf("DNSPrefix 'verylongdnsprefixthatismorethan45characterslong' is invalid. The DNSPrefix must contain between 3 and 45 characters and can contain only letters, numbers, and hyphens.  It must start with a letter and must end with a letter or a number. (length was 47)"),
+		},
+		{
+			"dnswith_special?char",
+			fmt.Errorf("DNSPrefix 'dnswith_special?char' is invalid. The DNSPrefix must contain between 3 and 45 characters and can contain only letters, numbers, and hyphens.  It must start with a letter and must end with a letter or a number. (length was 20)"),
+		},
+		{
+			"myDNS-1234",
+			nil,
+		},
 	}
 
-	version = GetValidPatchVersion(Kubernetes, "1.6.3")
-	if version != KubernetesVersion1Dot6Dot13 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot6Dot13)
+	for _, c := range cases {
+		err := ValidateDNSPrefix(c.dnsPrefix)
+		if err != nil && c.expectedErr != nil {
+			if err.Error() != c.expectedErr.Error() {
+				t.Fatalf("expected validateDNSPrefix to return error %s, but instead got %s", c.expectedErr.Error(), err.Error())
+			}
+		} else {
+			if c.expectedErr != nil {
+				t.Fatalf("expected validateDNSPrefix to return error %s, but instead got no error", c.expectedErr.Error())
+			} else if err != nil {
+				t.Fatalf("expected validateDNSPrefix to return no error, but instead got %s", err.Error())
+			}
+		}
 	}
-
-	version = GetValidPatchVersion(Kubernetes, "1.7.3")
-	if version != KubernetesVersion1Dot7Dot12 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot7Dot12)
-	}
-
-	version = GetValidPatchVersion(Kubernetes, "1.8.7")
-	if version != KubernetesVersion1Dot8Dot7 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot8Dot7)
-	}
-
-	version = GetValidPatchVersion(Kubernetes, "1.9.1")
-	if version != KubernetesVersion1Dot9Dot1 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot9Dot1)
-	}
-
-	version = GetValidPatchVersion(Kubernetes, "1.9.2")
-	if version != KubernetesVersion1Dot9Dot2 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot9Dot2)
-	}
-}
-
-func Test_RationalizeReleaseAndVersion(t *testing.T) {
-	version := RationalizeReleaseAndVersion(Kubernetes, "", "")
-	if version != KubernetesDefaultVersion {
-		t.Errorf("It is not the default Kubernetes version")
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "1.6", "")
-	if version != KubernetesVersion1Dot6Dot13 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot6Dot13)
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "1.9", "")
-	if version != KubernetesVersion1Dot9Dot3 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot9Dot3)
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "", "1.6.11")
-	if version != KubernetesVersion1Dot6Dot11 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot6Dot11)
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "1.6", "1.6.11")
-	if version != KubernetesVersion1Dot6Dot11 {
-		t.Errorf("It is not Kubernetes version %s", KubernetesVersion1Dot6Dot11)
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "", "1.6.7")
-	if version != "" {
-		t.Errorf("It is not empty string")
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "1.1", "")
-	if version != "" {
-		t.Errorf("It is not empty string")
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "1.1", "1.6.6")
-	if version != "" {
-		t.Errorf("It is not empty string")
-	}
-
-	version = RationalizeReleaseAndVersion(Kubernetes, "", "1.5.8")
-	if version != "1.5.8" {
-		t.Errorf("It is not 1.5.8")
-	}
-
 }

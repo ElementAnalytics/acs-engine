@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Azure/acs-engine/pkg/api"
+	"github.com/Azure/acs-engine/pkg/api/common"
 	"github.com/Azure/acs-engine/pkg/helpers"
 )
 
@@ -32,6 +33,11 @@ func kubernetesAddonSettingsInit(profile *api.Properties) []kubernetesFeatureSet
 			true,
 		},
 		{
+			"kubernetesmasteraddons-nvidia-device-plugin-daemonset.yaml",
+			"nvidia-device-plugin.yaml",
+			profile.IsNVIDIADevicePluginEnabled(),
+		},
+		{
 			"kubernetesmasteraddons-kubernetes-dashboard-deployment.yaml",
 			"kubernetes-dashboard-deployment.yaml",
 			profile.OrchestratorProfile.KubernetesConfig.IsDashboardEnabled(),
@@ -57,19 +63,64 @@ func kubernetesAddonSettingsInit(profile *api.Properties) []kubernetesFeatureSet
 			profile.OrchestratorProfile.KubernetesConfig.IsACIConnectorEnabled(),
 		},
 		{
+			"kubernetesmasteraddons-cluster-autoscaler-deployment.yaml",
+			"cluster-autoscaler-deployment.yaml",
+			profile.OrchestratorProfile.KubernetesConfig.IsClusterAutoscalerEnabled(),
+		},
+		{
 			"kubernetesmasteraddons-kube-rescheduler-deployment.yaml",
 			"kube-rescheduler-deployment.yaml",
 			profile.OrchestratorProfile.KubernetesConfig.IsReschedulerEnabled(),
 		},
 		{
+			"kubernetesmasteraddons-azure-npm-daemonset.yaml",
+			"azure-npm-daemonset.yaml",
+			profile.OrchestratorProfile.KubernetesConfig.NetworkPolicy == NetworkPolicyAzure && profile.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginAzure,
+		},
+		{
 			"kubernetesmasteraddons-calico-daemonset.yaml",
 			"calico-daemonset.yaml",
-			profile.OrchestratorProfile.KubernetesConfig.NetworkPolicy == "calico",
+			profile.OrchestratorProfile.KubernetesConfig.NetworkPolicy == NetworkPolicyCalico,
+		},
+		{
+			"kubernetesmasteraddons-cilium-daemonset.yaml",
+			"cilium-daemonset.yaml",
+			profile.OrchestratorProfile.KubernetesConfig.NetworkPolicy == NetworkPolicyCilium,
+		},
+		{
+			"kubernetesmasteraddons-flannel-daemonset.yaml",
+			"flannel-daemonset.yaml",
+			profile.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginFlannel,
 		},
 		{
 			"kubernetesmasteraddons-aad-default-admin-group-rbac.yaml",
 			"aad-default-admin-group-rbac.yaml",
 			profile.AADProfile != nil && profile.AADProfile.AdminGroupID != "",
+		},
+		{
+			"kubernetesmasteraddons-azure-cloud-provider-deployment.yaml",
+			"azure-cloud-provider-deployment.yaml",
+			true,
+		},
+		{
+			"kubernetesmasteraddons-metrics-server-deployment.yaml",
+			"kube-metrics-server-deployment.yaml",
+			profile.OrchestratorProfile.IsMetricsServerEnabled(),
+		},
+		{
+			"kubernetesmasteraddons-omsagent-daemonset.yaml",
+			"omsagent-daemonset.yaml",
+			profile.OrchestratorProfile.IsContainerMonitoringEnabled(),
+		},
+		{
+			"azure-cni-networkmonitor.yaml",
+			"azure-cni-networkmonitor.yaml",
+			profile.OrchestratorProfile.IsAzureCNI(),
+		},
+		{
+			"kubernetesmaster-audit-policy.yaml",
+			"audit-policy.yaml",
+			common.IsKubernetesVersionGe(profile.OrchestratorProfile.OrchestratorVersion, "1.8.0"),
 		},
 	}
 }
@@ -97,11 +148,6 @@ func kubernetesManifestSettingsInit(profile *api.Properties) []kubernetesFeature
 			helpers.IsTrueBoolPointer(profile.OrchestratorProfile.KubernetesConfig.EnablePodSecurityPolicy),
 		},
 		{
-			"kubernetesmaster-audit-policy.yaml",
-			"audit-policy.yaml",
-			isKubernetesVersionGe(profile.OrchestratorProfile.OrchestratorVersion, "1.8.0"),
-		},
-		{
 			"kubernetesmaster-kube-apiserver.yaml",
 			"kube-apiserver.yaml",
 			true,
@@ -114,7 +160,22 @@ func kubernetesManifestSettingsInit(profile *api.Properties) []kubernetesFeature
 	}
 }
 
-func kubernetesArtifactSettingsInit(profile *api.Properties) []kubernetesFeatureSetting {
+func kubernetesArtifactSettingsInitMaster(profile *api.Properties) []kubernetesFeatureSetting {
+	return []kubernetesFeatureSetting{
+		{
+			"kuberneteskubelet.service",
+			"kubelet.service",
+			true,
+		},
+		{
+			"kubernetesazurekms.service",
+			"kms.service",
+			true,
+		},
+	}
+}
+
+func kubernetesArtifactSettingsInitAgent(profile *api.Properties) []kubernetesFeatureSetting {
 	return []kubernetesFeatureSetting{
 		{
 			"kuberneteskubelet.service",

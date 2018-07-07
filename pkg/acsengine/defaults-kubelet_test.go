@@ -1,15 +1,47 @@
 package acsengine
 
 import (
+	"strconv"
 	"testing"
 
-	"github.com/Azure/acs-engine/pkg/api/common"
+	"github.com/Azure/acs-engine/pkg/helpers"
 )
+
+func TestKubeletConfigDefaults(t *testing.T) {
+	cs := CreateMockContainerService("testcluster", "1.8.6", 3, 2, false)
+	setKubeletConfig(cs)
+	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	// TODO test all default config values
+	for key, val := range map[string]string{
+		"--azure-container-registry-config": "/etc/kubernetes/azure.json",
+		"--image-pull-progress-deadline":    "30m",
+	} {
+		if k[key] != val {
+			t.Fatalf("got unexpected kubelet config value for %s: %s, expected %s",
+				key, k[key], val)
+		}
+	}
+
+	cs = CreateMockContainerService("testcluster", "1.8.6", 3, 2, false)
+	// TODO test all default overrides
+	overrideVal := "/etc/override"
+	cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig = map[string]string{
+		"--azure-container-registry-config": overrideVal,
+	}
+	setKubeletConfig(cs)
+	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	for key, val := range map[string]string{"--azure-container-registry-config": overrideVal} {
+		if k[key] != val {
+			t.Fatalf("got unexpected kubelet config value for %s: %s, expected %s",
+				key, k[key], val)
+		}
+	}
+}
 
 func TestKubeletConfigUseCloudControllerManager(t *testing.T) {
 	// Test UseCloudControllerManager = true
-	cs := createContainerService("testcluster", common.KubernetesVersion1Dot7Dot12, 3, 2)
-	cs.Properties.OrchestratorProfile.KubernetesConfig.UseCloudControllerManager = pointerToBool(true)
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.UseCloudControllerManager = helpers.PointerToBool(true)
 	setKubeletConfig(cs)
 	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
 	if k["--cloud-provider"] != "external" {
@@ -18,8 +50,8 @@ func TestKubeletConfigUseCloudControllerManager(t *testing.T) {
 	}
 
 	// Test UseCloudControllerManager = false
-	cs = createContainerService("testcluster", common.KubernetesVersion1Dot7Dot12, 3, 2)
-	cs.Properties.OrchestratorProfile.KubernetesConfig.UseCloudControllerManager = pointerToBool(false)
+	cs = CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.UseCloudControllerManager = helpers.PointerToBool(false)
 	setKubeletConfig(cs)
 	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
 	if k["--cloud-provider"] != "azure" {
@@ -29,46 +61,73 @@ func TestKubeletConfigUseCloudControllerManager(t *testing.T) {
 
 }
 
-func TestKubeletConfigNetworkPolicy(t *testing.T) {
-	// Test NetworkPolicy = none
-	cs := createContainerService("testcluster", common.KubernetesVersion1Dot7Dot12, 3, 2)
-	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = NetworkPolicyNone
+func TestKubeletConfigCloudConfig(t *testing.T) {
+	// Test default value and custom value for --cloud-config
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	setKubeletConfig(cs)
+	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--cloud-config"] != "/etc/kubernetes/azure.json" {
+		t.Fatalf("got unexpected '--cloud-config' kubelet config default value: %s",
+			k["--cloud-config"])
+	}
+
+	cs = CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig["--cloud-config"] = "custom.json"
+	setKubeletConfig(cs)
+	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--cloud-config"] != "custom.json" {
+		t.Fatalf("got unexpected '--cloud-config' kubelet config default value: %s",
+			k["--cloud-config"])
+	}
+}
+
+func TestKubeletConfigAzureContainerRegistryCofig(t *testing.T) {
+	// Test default value and custom value for --azure-container-registry-config
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	setKubeletConfig(cs)
+	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--azure-container-registry-config"] != "/etc/kubernetes/azure.json" {
+		t.Fatalf("got unexpected '--azure-container-registry-config' kubelet config default value: %s",
+			k["--azure-container-registry-config"])
+	}
+
+	cs = CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig["--azure-container-registry-config"] = "custom.json"
+	setKubeletConfig(cs)
+	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--azure-container-registry-config"] != "custom.json" {
+		t.Fatalf("got unexpected '--azure-container-registry-config' kubelet config default value: %s",
+			k["--azure-container-registry-config"])
+	}
+}
+
+func TestKubeletConfigNetworkPlugin(t *testing.T) {
+	// Test NetworkPlugin = "kubenet"
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin = NetworkPluginKubenet
 	setKubeletConfig(cs)
 	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
 	if k["--network-plugin"] != NetworkPluginKubenet {
-		t.Fatalf("got unexpected '--network-plugin' kubelet config value for NetworkPolicy=none: %s",
+		t.Fatalf("got unexpected '--network-plugin' kubelet config value for NetworkPlugin=kubenet: %s",
 			k["--network-plugin"])
 	}
 
-	// Test NetworkPolicy = azure
-	cs = createContainerService("testcluster", common.KubernetesVersion1Dot7Dot12, 3, 2)
-	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = "azure"
+	// Test NetworkPlugin = "azure"
+	cs = CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin = NetworkPluginAzure
 	setKubeletConfig(cs)
 	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
 	if k["--network-plugin"] != "cni" {
-		t.Fatalf("got unexpected '--network-plugin' kubelet config value for NetworkPolicy=azure: %s",
+		t.Fatalf("got unexpected '--network-plugin' kubelet config value for NetworkPlugin=azure: %s",
 			k["--network-plugin"])
 	}
 
-}
-
-func TestKubeletConfig1Dot5(t *testing.T) {
-	// Test Kubelet v1.5 settings
-	cs := createContainerService("testcluster", common.KubernetesVersion1Dot5Dot8, 3, 2)
-	setKubeletConfig(cs)
-	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
-	for _, key := range []string{"--non-masquerade-cidr", "--cgroups-per-qos", "--enforce-node-allocatable"} {
-		if _, ok := k[key]; ok {
-			t.Fatalf("'%s' kubelet config value should not be present for clusters < v1.6: %s",
-				key, k[key])
-		}
-	}
 }
 
 func TestKubeletConfigEnableSecureKubelet(t *testing.T) {
 	// Test EnableSecureKubelet = true
-	cs := createContainerService("testcluster", common.KubernetesVersion1Dot7Dot12, 3, 2)
-	cs.Properties.OrchestratorProfile.KubernetesConfig.EnableSecureKubelet = pointerToBool(true)
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.EnableSecureKubelet = helpers.PointerToBool(true)
 	setKubeletConfig(cs)
 	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
 	if k["--anonymous-auth"] != "false" {
@@ -85,8 +144,8 @@ func TestKubeletConfigEnableSecureKubelet(t *testing.T) {
 	}
 
 	// Test EnableSecureKubelet = false
-	cs = createContainerService("testcluster", common.KubernetesVersion1Dot7Dot12, 3, 2)
-	cs.Properties.OrchestratorProfile.KubernetesConfig.EnableSecureKubelet = pointerToBool(false)
+	cs = CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.EnableSecureKubelet = helpers.PointerToBool(false)
 	setKubeletConfig(cs)
 	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
 	for _, key := range []string{"--anonymous-auth", "--client-ca-file"} {
@@ -96,4 +155,35 @@ func TestKubeletConfigEnableSecureKubelet(t *testing.T) {
 		}
 	}
 
+}
+
+func TestKubeletMaxPods(t *testing.T) {
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin = NetworkPluginAzure
+	setKubeletConfig(cs)
+	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--max-pods"] != strconv.Itoa(DefaultKubernetesMaxPodsVNETIntegrated) {
+		t.Fatalf("got unexpected '--max-pods' kubelet config value for NetworkPolicy=%s: %s",
+			NetworkPluginAzure, k["--max-pods"])
+	}
+
+	cs = CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin = NetworkPluginKubenet
+	setKubeletConfig(cs)
+	k = cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--max-pods"] != strconv.Itoa(DefaultKubernetesMaxPods) {
+		t.Fatalf("got unexpected '--max-pods' kubelet config value for NetworkPolicy=%s: %s",
+			NetworkPluginKubenet, k["--max-pods"])
+	}
+}
+
+func TestKubeletCalico(t *testing.T) {
+	cs := CreateMockContainerService("testcluster", defaultTestClusterVer, 3, 2, false)
+	cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy = NetworkPolicyCalico
+	setKubeletConfig(cs)
+	k := cs.Properties.OrchestratorProfile.KubernetesConfig.KubeletConfig
+	if k["--network-plugin"] != "cni" {
+		t.Fatalf("got unexpected '--network-plugin' kubelet config value for NetworkPolicy=%s: %s",
+			NetworkPolicyCalico, k["--network-plugin"])
+	}
 }

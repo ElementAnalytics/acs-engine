@@ -2,27 +2,28 @@ package acsengine
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/Azure/acs-engine/pkg/api"
+	"github.com/Azure/acs-engine/pkg/api/common"
 	"github.com/Azure/acs-engine/pkg/helpers"
 )
 
 func setKubeletConfig(cs *api.ContainerService) {
 	o := cs.Properties.OrchestratorProfile
-	cloudSpecConfig := GetCloudSpecConfig(cs.Location)
+	cloudSpecConfig := getCloudSpecConfig(cs.Location)
 	staticLinuxKubeletConfig := map[string]string{
-		"--address":                         "0.0.0.0",
-		"--allow-privileged":                "true",
-		"--anonymous-auth":                  "false",
-		"--authorization-mode":              "Webhook",
-		"--client-ca-file":                  "/etc/kubernetes/certs/ca.crt",
-		"--pod-manifest-path":               "/etc/kubernetes/manifests",
-		"--cluster-dns":                     o.KubernetesConfig.DNSServiceIP,
-		"--cgroups-per-qos":                 "true",
-		"--enforce-node-allocatable":        "pods",
-		"--kubeconfig":                      "/var/lib/kubelet/kubeconfig",
-		"--azure-container-registry-config": "/etc/kubernetes/azure.json",
-		"--keep-terminated-pod-volumes":     "false",
+		"--address":                     "0.0.0.0",
+		"--allow-privileged":            "true",
+		"--anonymous-auth":              "false",
+		"--authorization-mode":          "Webhook",
+		"--client-ca-file":              "/etc/kubernetes/certs/ca.crt",
+		"--pod-manifest-path":           "/etc/kubernetes/manifests",
+		"--cluster-dns":                 o.KubernetesConfig.DNSServiceIP,
+		"--cgroups-per-qos":             "true",
+		"--enforce-node-allocatable":    "pods",
+		"--kubeconfig":                  "/var/lib/kubelet/kubeconfig",
+		"--keep-terminated-pod-volumes": "false",
 	}
 
 	staticWindowsKubeletConfig := make(map[string]string)
@@ -32,19 +33,22 @@ func setKubeletConfig(cs *api.ContainerService) {
 
 	// Default Kubelet config
 	defaultKubeletConfig := map[string]string{
-		"--cluster-domain":               "cluster.local",
-		"--network-plugin":               "cni",
-		"--pod-infra-container-image":    cloudSpecConfig.KubernetesSpecConfig.KubernetesImageBase + KubeConfigs[o.OrchestratorVersion]["pause"],
-		"--max-pods":                     strconv.Itoa(DefaultKubernetesKubeletMaxPods),
-		"--eviction-hard":                DefaultKubernetesHardEvictionThreshold,
-		"--node-status-update-frequency": KubeConfigs[o.OrchestratorVersion]["nodestatusfreq"],
-		"--image-gc-high-threshold":      strconv.Itoa(DefaultKubernetesGCHighThreshold),
-		"--image-gc-low-threshold":       strconv.Itoa(DefaultKubernetesGCLowThreshold),
-		"--non-masquerade-cidr":          DefaultNonMasqueradeCidr,
-		"--cloud-provider":               "azure",
-		"--cloud-config":                 "/etc/kubernetes/azure.json",
-		"--event-qps":                    DefaultKubeletEventQPS,
-		"--cadvisor-port":                DefaultKubeletCadvisorPort,
+		"--cluster-domain":                  "cluster.local",
+		"--network-plugin":                  "cni",
+		"--pod-infra-container-image":       cloudSpecConfig.KubernetesSpecConfig.KubernetesImageBase + KubeConfigs[o.OrchestratorVersion]["pause"],
+		"--max-pods":                        strconv.Itoa(DefaultKubernetesMaxPodsVNETIntegrated),
+		"--eviction-hard":                   DefaultKubernetesHardEvictionThreshold,
+		"--node-status-update-frequency":    KubeConfigs[o.OrchestratorVersion]["nodestatusfreq"],
+		"--image-gc-high-threshold":         strconv.Itoa(DefaultKubernetesGCHighThreshold),
+		"--image-gc-low-threshold":          strconv.Itoa(DefaultKubernetesGCLowThreshold),
+		"--non-masquerade-cidr":             o.KubernetesConfig.ClusterSubnet,
+		"--cloud-provider":                  "azure",
+		"--cloud-config":                    "/etc/kubernetes/azure.json",
+		"--azure-container-registry-config": "/etc/kubernetes/azure.json",
+		"--event-qps":                       DefaultKubeletEventQPS,
+		"--cadvisor-port":                   DefaultKubeletCadvisorPort,
+		"--pod-max-pids":                    strconv.Itoa(DefaultKubeletPodMaxPIDs),
+		"--image-pull-progress-deadline":    "30m",
 	}
 
 	// If no user-configurable kubelet config values exists, use the defaults
@@ -57,8 +61,11 @@ func setKubeletConfig(cs *api.ContainerService) {
 	}
 
 	// Override default --network-plugin?
-	if o.KubernetesConfig.NetworkPolicy == NetworkPolicyNone {
-		o.KubernetesConfig.KubeletConfig["--network-plugin"] = NetworkPluginKubenet
+	if o.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
+		if o.KubernetesConfig.NetworkPolicy != NetworkPolicyCalico {
+			o.KubernetesConfig.KubeletConfig["--network-plugin"] = NetworkPluginKubenet
+		}
+		o.KubernetesConfig.KubeletConfig["--max-pods"] = strconv.Itoa(DefaultKubernetesMaxPods)
 	}
 
 	// We don't support user-configurable values for the following,
@@ -74,8 +81,15 @@ func setKubeletConfig(cs *api.ContainerService) {
 	}
 
 	// Get rid of values not supported in v1.5 clusters
-	if !isKubernetesVersionGe(o.OrchestratorVersion, "1.6.0") {
+	if !common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.6.0") {
 		for _, key := range []string{"--non-masquerade-cidr", "--cgroups-per-qos", "--enforce-node-allocatable"} {
+			delete(o.KubernetesConfig.KubeletConfig, key)
+		}
+	}
+
+	// Get rid of values not supported in v1.10 clusters
+	if !common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.10.0") {
+		for _, key := range []string{"--pod-max-pids"} {
 			delete(o.KubernetesConfig.KubeletConfig, key)
 		}
 	}
@@ -95,8 +109,8 @@ func setKubeletConfig(cs *api.ContainerService) {
 		}
 		setMissingKubeletValues(cs.Properties.MasterProfile.KubernetesConfig, o.KubernetesConfig.KubeletConfig)
 		addDefaultFeatureGates(cs.Properties.MasterProfile.KubernetesConfig.KubeletConfig, o.OrchestratorVersion, "", "")
-
 	}
+
 	// Agent-specific kubelet config changes go here
 	for _, profile := range cs.Properties.AgentPoolProfiles {
 		if profile.KubernetesConfig == nil {
@@ -104,7 +118,14 @@ func setKubeletConfig(cs *api.ContainerService) {
 			profile.KubernetesConfig.KubeletConfig = copyMap(profile.KubernetesConfig.KubeletConfig)
 		}
 		setMissingKubeletValues(profile.KubernetesConfig, o.KubernetesConfig.KubeletConfig)
-		addDefaultFeatureGates(profile.KubernetesConfig.KubeletConfig, o.OrchestratorVersion, "1.6.0", "Accelerators=true")
+
+		// For N Series (GPU) VMs
+		if strings.Contains(profile.VMSize, "Standard_N") {
+			if !cs.Properties.IsNVIDIADevicePluginEnabled() && !common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.11.0") {
+				// enabling accelerators for Kubernetes >= 1.6 to <= 1.9
+				addDefaultFeatureGates(profile.KubernetesConfig.KubeletConfig, o.OrchestratorVersion, "1.6.0", "Accelerators=true")
+			}
+		}
 	}
 }
 

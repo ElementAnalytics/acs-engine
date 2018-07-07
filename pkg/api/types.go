@@ -2,14 +2,18 @@ package api
 
 import (
 	neturl "net/url"
+	"strconv"
+	"strings"
 
 	"github.com/Azure/acs-engine/pkg/api/agentPoolOnlyApi/v20170831"
+	"github.com/Azure/acs-engine/pkg/api/agentPoolOnlyApi/v20180331"
+	"github.com/Azure/acs-engine/pkg/api/common"
 	"github.com/Azure/acs-engine/pkg/api/v20160330"
 	"github.com/Azure/acs-engine/pkg/api/v20160930"
 	"github.com/Azure/acs-engine/pkg/api/v20170131"
 	"github.com/Azure/acs-engine/pkg/api/v20170701"
 	"github.com/Azure/acs-engine/pkg/api/vlabs"
-	"github.com/Masterminds/semver"
+	"github.com/blang/semver"
 )
 
 // TypeMeta describes an individual API model object
@@ -56,12 +60,29 @@ type Properties struct {
 	AADProfile              *AADProfile              `json:"aadProfile,omitempty"`
 	CustomProfile           *CustomProfile           `json:"customProfile,omitempty"`
 	HostedMasterProfile     *HostedMasterProfile     `json:"hostedMasterProfile,omitempty"`
+	AddonProfiles           map[string]AddonProfile  `json:"addonProfiles,omitempty"`
+	AzProfile               *AzProfile               `json:"azProfile,omitempty"`
+}
+
+// AddonProfile represents an addon for managed cluster
+type AddonProfile struct {
+	Enabled bool              `json:"enabled"`
+	Config  map[string]string `json:"config"`
+}
+
+// AzProfile holds the azure context for where the cluster resides
+type AzProfile struct {
+	TenantID       string `json:"tenantId,omitempty"`
+	SubscriptionID string `json:"subscriptionId,omitempty"`
+	ResourceGroup  string `json:"resourceGroup,omitempty"`
+	Location       string `json:"location,omitempty"`
 }
 
 // ServicePrincipalProfile contains the client and secret used by the cluster for Azure Resource CRUD
 type ServicePrincipalProfile struct {
 	ClientID          string             `json:"clientId"`
-	Secret            string             `json:"secret,omitempty"`
+	Secret            string             `json:"secret,omitempty" conform:"redact"`
+	ObjectID          string             `json:"objectId,omitempty"`
 	KeyvaultSecretRef *KeyvaultSecretRef `json:"keyvaultSecretRef,omitempty"`
 }
 
@@ -76,33 +97,33 @@ type KeyvaultSecretRef struct {
 // CertificateProfile represents the definition of the master cluster
 type CertificateProfile struct {
 	// CaCertificate is the certificate authority certificate.
-	CaCertificate string `json:"caCertificate,omitempty"`
+	CaCertificate string `json:"caCertificate,omitempty" conform:"redact"`
 	// CaPrivateKey is the certificate authority key.
-	CaPrivateKey string `json:"caPrivateKey,omitempty"`
+	CaPrivateKey string `json:"caPrivateKey,omitempty" conform:"redact"`
 	// ApiServerCertificate is the rest api server certificate, and signed by the CA
-	APIServerCertificate string `json:"apiServerCertificate,omitempty"`
+	APIServerCertificate string `json:"apiServerCertificate,omitempty" conform:"redact"`
 	// ApiServerPrivateKey is the rest api server private key, and signed by the CA
-	APIServerPrivateKey string `json:"apiServerPrivateKey,omitempty"`
+	APIServerPrivateKey string `json:"apiServerPrivateKey,omitempty" conform:"redact"`
 	// ClientCertificate is the certificate used by the client kubelet services and signed by the CA
-	ClientCertificate string `json:"clientCertificate,omitempty"`
+	ClientCertificate string `json:"clientCertificate,omitempty" conform:"redact"`
 	// ClientPrivateKey is the private key used by the client kubelet services and signed by the CA
-	ClientPrivateKey string `json:"clientPrivateKey,omitempty"`
+	ClientPrivateKey string `json:"clientPrivateKey,omitempty" conform:"redact"`
 	// KubeConfigCertificate is the client certificate used for kubectl cli and signed by the CA
-	KubeConfigCertificate string `json:"kubeConfigCertificate,omitempty"`
+	KubeConfigCertificate string `json:"kubeConfigCertificate,omitempty" conform:"redact"`
 	// KubeConfigPrivateKey is the client private key used for kubectl cli and signed by the CA
-	KubeConfigPrivateKey string `json:"kubeConfigPrivateKey,omitempty"`
+	KubeConfigPrivateKey string `json:"kubeConfigPrivateKey,omitempty" conform:"redact"`
 	// EtcdServerCertificate is the server certificate for etcd, and signed by the CA
-	EtcdServerCertificate string `json:"etcdServerCertificate,omitempty"`
+	EtcdServerCertificate string `json:"etcdServerCertificate,omitempty" conform:"redact"`
 	// EtcdServerPrivateKey is the server private key for etcd, and signed by the CA
-	EtcdServerPrivateKey string `json:"etcdServerPrivateKey,omitempty"`
+	EtcdServerPrivateKey string `json:"etcdServerPrivateKey,omitempty" conform:"redact"`
 	// EtcdClientCertificate is etcd client certificate, and signed by the CA
-	EtcdClientCertificate string `json:"etcdClientCertificate,omitempty"`
+	EtcdClientCertificate string `json:"etcdClientCertificate,omitempty" conform:"redact"`
 	// EtcdClientPrivateKey is the etcd client private key, and signed by the CA
-	EtcdClientPrivateKey string `json:"etcdClientPrivateKey,omitempty"`
+	EtcdClientPrivateKey string `json:"etcdClientPrivateKey,omitempty" conform:"redact"`
 	// EtcdPeerCertificates is list of etcd peer certificates, and signed by the CA
-	EtcdPeerCertificates []string `json:"etcdPeerCertificates,omitempty"`
+	EtcdPeerCertificates []string `json:"etcdPeerCertificates,omitempty" conform:"redact"`
 	// EtcdPeerPrivateKeys is list of etcd peer private keys, and signed by the CA
-	EtcdPeerPrivateKeys []string `json:"etcdPeerPrivateKeys,omitempty"`
+	EtcdPeerPrivateKeys []string `json:"etcdPeerPrivateKeys,omitempty" conform:"redact"`
 }
 
 // LinuxProfile represents the linux parameters passed to the cluster
@@ -111,9 +132,11 @@ type LinuxProfile struct {
 	SSH           struct {
 		PublicKeys []PublicKey `json:"publicKeys"`
 	} `json:"ssh"`
-	Secrets       []KeyVaultSecrets `json:"secrets,omitempty"`
-	Distro        Distro            `json:"distro,omitempty"`
-	ScriptRootURL string            `json:"scriptroot,omitempty"`
+	Secrets            []KeyVaultSecrets   `json:"secrets,omitempty"`
+	Distro             Distro              `json:"distro,omitempty"`
+	ScriptRootURL      string              `json:"scriptroot,omitempty"`
+	CustomSearchDomain *CustomSearchDomain `json:"customSearchDomain,omitempty"`
+	CustomNodesDNS     *CustomNodesDNS     `json:"CustomNodesDNS,omitempty"`
 }
 
 // PublicKey represents an SSH key for LinuxProfile
@@ -121,12 +144,27 @@ type PublicKey struct {
 	KeyData string `json:"keyData"`
 }
 
+// CustomSearchDomain represents the Search Domain when the custom vnet has a windows server DNS as a nameserver.
+type CustomSearchDomain struct {
+	Name          string `json:"name,omitempty"`
+	RealmUser     string `json:"realmUser,omitempty"`
+	RealmPassword string `json:"realmPassword,omitempty"`
+}
+
+// CustomNodesDNS represents the Search Domain when the custom vnet for a custom DNS as a nameserver.
+type CustomNodesDNS struct {
+	DNSServer string `json:"dnsServer,omitempty"`
+}
+
 // WindowsProfile represents the windows parameters passed to the cluster
 type WindowsProfile struct {
 	AdminUsername         string            `json:"adminUsername"`
-	AdminPassword         string            `json:"adminPassword"`
+	AdminPassword         string            `json:"adminPassword" conform:"redact"`
 	ImageVersion          string            `json:"imageVersion"`
 	WindowsImageSourceURL string            `json:"windowsImageSourceURL"`
+	WindowsPublisher      string            `json:"windowsPublisher"`
+	WindowsOffer          string            `json:"windowsOffer"`
+	WindowsSku            string            `json:"windowsSku"`
 	Secrets               []KeyVaultSecrets `json:"secrets,omitempty"`
 }
 
@@ -156,6 +194,7 @@ type OrchestratorProfile struct {
 	OrchestratorType    string            `json:"orchestratorType"`
 	OrchestratorVersion string            `json:"orchestratorVersion"`
 	KubernetesConfig    *KubernetesConfig `json:"kubernetesConfig,omitempty"`
+	OpenShiftConfig     *OpenShiftConfig  `json:"openshiftConfig,omitempty"`
 	DcosConfig          *DcosConfig       `json:"dcosConfig,omitempty"`
 }
 
@@ -195,6 +234,22 @@ func (a *KubernetesAddon) IsEnabled(ifNil bool) bool {
 	return *a.Enabled
 }
 
+// PrivateCluster defines the configuration for a private cluster
+type PrivateCluster struct {
+	Enabled        *bool                  `json:"enabled,omitempty"`
+	JumpboxProfile *PrivateJumpboxProfile `json:"jumpboxProfile,omitempty"`
+}
+
+// PrivateJumpboxProfile represents a jumpbox definition
+type PrivateJumpboxProfile struct {
+	Name           string `json:"name" validate:"required"`
+	VMSize         string `json:"vmSize" validate:"required"`
+	OSDiskSizeGB   int    `json:"osDiskSizeGB,omitempty" validate:"min=0,max=1023"`
+	Username       string `json:"username,omitempty"`
+	PublicKey      string `json:"publicKey" validate:"required"`
+	StorageProfile string `json:"storageProfile,omitempty"`
+}
+
 // CloudProviderConfig contains the KubernetesConfig properties specific to the Cloud Provider
 // TODO use this when strict JSON checking accommodates struct embedding
 type CloudProviderConfig struct {
@@ -225,6 +280,7 @@ type KubernetesConfig struct {
 	KubernetesImageBase              string            `json:"kubernetesImageBase,omitempty"`
 	ClusterSubnet                    string            `json:"clusterSubnet,omitempty"`
 	NetworkPolicy                    string            `json:"networkPolicy,omitempty"`
+	NetworkPlugin                    string            `json:"networkPlugin,omitempty"`
 	ContainerRuntime                 string            `json:"containerRuntime,omitempty"`
 	MaxPods                          int               `json:"maxPods,omitempty"`
 	DockerBridgeSubnet               string            `json:"dockerBridgeSubnet,omitempty"`
@@ -235,21 +291,26 @@ type KubernetesConfig struct {
 	DockerEngineVersion              string            `json:"dockerEngineVersion,omitempty"`
 	CustomCcmImage                   string            `json:"customCcmImage,omitempty"` // Image for cloud-controller-manager
 	UseCloudControllerManager        *bool             `json:"useCloudControllerManager,omitempty"`
+	CustomWindowsPackageURL          string            `json:"customWindowsPackageURL,omitempty"`
 	UseInstanceMetadata              *bool             `json:"useInstanceMetadata,omitempty"`
 	EnableRbac                       *bool             `json:"enableRbac,omitempty"`
 	EnableSecureKubelet              *bool             `json:"enableSecureKubelet,omitempty"`
 	EnableAggregatedAPIs             bool              `json:"enableAggregatedAPIs,omitempty"`
+	PrivateCluster                   *PrivateCluster   `json:"privateCluster,omitempty"`
 	GCHighThreshold                  int               `json:"gchighthreshold,omitempty"`
 	GCLowThreshold                   int               `json:"gclowthreshold,omitempty"`
 	EtcdVersion                      string            `json:"etcdVersion,omitempty"`
 	EtcdDiskSizeGB                   string            `json:"etcdDiskSizeGB,omitempty"`
+	EtcdEncryptionKey                string            `json:"etcdEncryptionKey,omitempty"`
 	EnableDataEncryptionAtRest       *bool             `json:"enableDataEncryptionAtRest,omitempty"`
+	EnableEncryptionWithExternalKms  *bool             `json:"enableEncryptionWithExternalKms,omitempty"`
 	EnablePodSecurityPolicy          *bool             `json:"enablePodSecurityPolicy,omitempty"`
 	Addons                           []KubernetesAddon `json:"addons,omitempty"`
 	KubeletConfig                    map[string]string `json:"kubeletConfig,omitempty"`
 	ControllerManagerConfig          map[string]string `json:"controllerManagerConfig,omitempty"`
 	CloudControllerManagerConfig     map[string]string `json:"cloudControllerManagerConfig,omitempty"`
 	APIServerConfig                  map[string]string `json:"apiServerConfig,omitempty"`
+	SchedulerConfig                  map[string]string `json:"schedulerConfig,omitempty"`
 	CloudProviderBackoff             bool              `json:"cloudProviderBackoff,omitempty"`
 	CloudProviderBackoffRetries      int               `json:"cloudProviderBackoffRetries,omitempty"`
 	CloudProviderBackoffJitter       float64           `json:"cloudProviderBackoffJitter,omitempty"`
@@ -266,16 +327,54 @@ type KubernetesConfig struct {
 	CtrlMgrRouteReconciliationPeriod string            `json:"ctrlMgrRouteReconciliationPeriod,omitempty"`
 }
 
+// CustomFile has source as the full absolute source path to a file and dest
+// is the full absolute desired destination path to put the file on a master node
+type CustomFile struct {
+	Source string `json:"source,omitempty"`
+	Dest   string `json:"dest,omitempty"`
+}
+
+// BootstrapProfile represents the definition of the DCOS bootstrap node used to deploy the cluster
+type BootstrapProfile struct {
+	VMSize       string `json:"vmSize,omitempty"`
+	OSDiskSizeGB int    `json:"osDiskSizeGB,omitempty"`
+	OAuthEnabled bool   `json:"oauthEnabled,omitempty"`
+	StaticIP     string `json:"staticIP,omitempty"`
+	Subnet       string `json:"subnet,omitempty"`
+}
+
 // DcosConfig Configuration for DC/OS
 type DcosConfig struct {
-	DcosBootstrapURL        string `json:"dcosBootstrapURL,omitempty"`
-	DcosWindowsBootstrapURL string `json:"dcosWindowsBootstrapURL,omitempty"`
+	DcosBootstrapURL         string            `json:"dcosBootstrapURL,omitempty"`
+	DcosWindowsBootstrapURL  string            `json:"dcosWindowsBootstrapURL,omitempty"`
+	Registry                 string            `json:"registry,omitempty"`
+	RegistryUser             string            `json:"registryUser,omitempty"`
+	RegistryPass             string            `json:"registryPassword,omitempty"`
+	DcosRepositoryURL        string            `json:"dcosRepositoryURL,omitempty"`        // For CI use, you need to specify
+	DcosClusterPackageListID string            `json:"dcosClusterPackageListID,omitempty"` // all three of these items
+	DcosProviderPackageID    string            `json:"dcosProviderPackageID,omitempty"`    // repo url is the location of the build,
+	BootstrapProfile         *BootstrapProfile `json:"bootstrapProfile,omitempty"`
+}
+
+// OpenShiftConfig holds configuration for OpenShift
+type OpenShiftConfig struct {
+	KubernetesConfig *KubernetesConfig `json:"kubernetesConfig,omitempty"`
+
+	// ClusterUsername and ClusterPassword are temporary, do not rely on them.
+	ClusterUsername string `json:"clusterUsername,omitempty"`
+	ClusterPassword string `json:"clusterPassword,omitempty"`
+
+	// EnableAADAuthentication is temporary, do not rely on it.
+	EnableAADAuthentication bool `json:"enableAADAuthentication,omitempty"`
+
+	ConfigBundles map[string][]byte `json:"configBundles,omitempty"`
 }
 
 // MasterProfile represents the definition of the master cluster
 type MasterProfile struct {
 	Count                    int               `json:"count"`
 	DNSPrefix                string            `json:"dnsPrefix"`
+	SubjectAltNames          []string          `json:"subjectAltNames"`
 	VMSize                   string            `json:"vmSize"`
 	OSDiskSizeGB             int               `json:"osDiskSizeGB,omitempty"`
 	VnetSubnetID             string            `json:"vnetSubnetID,omitempty"`
@@ -290,11 +389,19 @@ type MasterProfile struct {
 	Extensions               []Extension       `json:"extensions"`
 	Distro                   Distro            `json:"distro,omitempty"`
 	KubernetesConfig         *KubernetesConfig `json:"kubernetesConfig,omitempty"`
+	ImageRef                 *ImageReference   `json:"imageReference,omitempty"`
+	CustomFiles              *[]CustomFile     `json:"customFiles,omitempty"`
 
 	// Master LB public endpoint/FQDN with port
 	// The format will be FQDN:2376
 	// Not used during PUT, returned as part of GET
 	FQDN string `json:"fqdn,omitempty"`
+}
+
+// ImageReference represents a reference to an Image resource in Azure.
+type ImageReference struct {
+	Name          string `json:"name,omitempty"`
+	ResourceGroup string `json:"resourceGroup,omitempty"`
 }
 
 // ExtensionProfile represents an extension definition
@@ -318,27 +425,34 @@ type Extension struct {
 
 // AgentPoolProfile represents an agent pool definition
 type AgentPoolProfile struct {
-	Name                string `json:"name"`
-	Count               int    `json:"count"`
-	VMSize              string `json:"vmSize"`
-	OSDiskSizeGB        int    `json:"osDiskSizeGB,omitempty"`
-	DNSPrefix           string `json:"dnsPrefix,omitempty"`
-	OSType              OSType `json:"osType,omitempty"`
-	Ports               []int  `json:"ports,omitempty"`
-	AvailabilityProfile string `json:"availabilityProfile"`
-	StorageProfile      string `json:"storageProfile,omitempty"`
-	DiskSizesGB         []int  `json:"diskSizesGB,omitempty"`
-	VnetSubnetID        string `json:"vnetSubnetID,omitempty"`
-	Subnet              string `json:"subnet"`
-	IPAddressCount      int    `json:"ipAddressCount,omitempty"`
-	Distro              Distro `json:"distro,omitempty"`
-
-	FQDN                  string            `json:"fqdn,omitempty"`
-	CustomNodeLabels      map[string]string `json:"customNodeLabels,omitempty"`
-	PreprovisionExtension *Extension        `json:"preProvisionExtension"`
-	Extensions            []Extension       `json:"extensions"`
-	KubernetesConfig      *KubernetesConfig `json:"kubernetesConfig,omitempty"`
+	Name                         string               `json:"name"`
+	Count                        int                  `json:"count"`
+	VMSize                       string               `json:"vmSize"`
+	OSDiskSizeGB                 int                  `json:"osDiskSizeGB,omitempty"`
+	DNSPrefix                    string               `json:"dnsPrefix,omitempty"`
+	OSType                       OSType               `json:"osType,omitempty"`
+	Ports                        []int                `json:"ports,omitempty"`
+	AvailabilityProfile          string               `json:"availabilityProfile"`
+	ScaleSetPriority             string               `json:"scaleSetPriority,omitempty"`
+	ScaleSetEvictionPolicy       string               `json:"scaleSetEvictionPolicy,omitempty"`
+	StorageProfile               string               `json:"storageProfile,omitempty"`
+	DiskSizesGB                  []int                `json:"diskSizesGB,omitempty"`
+	VnetSubnetID                 string               `json:"vnetSubnetID,omitempty"`
+	Subnet                       string               `json:"subnet"`
+	IPAddressCount               int                  `json:"ipAddressCount,omitempty"`
+	Distro                       Distro               `json:"distro,omitempty"`
+	Role                         AgentPoolProfileRole `json:"role,omitempty"`
+	AcceleratedNetworkingEnabled bool                 `json:"acceleratedNetworkingEnabled,omitempty"`
+	FQDN                         string               `json:"fqdn,omitempty"`
+	CustomNodeLabels             map[string]string    `json:"customNodeLabels,omitempty"`
+	PreprovisionExtension        *Extension           `json:"preProvisionExtension"`
+	Extensions                   []Extension          `json:"extensions"`
+	KubernetesConfig             *KubernetesConfig    `json:"kubernetesConfig,omitempty"`
+	ImageRef                     *ImageReference      `json:"imageReference,omitempty"`
 }
+
+// AgentPoolProfileRole represents an agent role
+type AgentPoolProfileRole string
 
 // DiagnosticsProfile setting to enable/disable capturing
 // diagnostics for VMs hosting container cluster.
@@ -414,12 +528,25 @@ type HostedMasterProfile struct {
 	Subnet string `json:"subnet"`
 }
 
+// AuthenticatorType represents the authenticator type the cluster was
+// set up with.
+type AuthenticatorType string
+
+const (
+	// OIDC represent cluster setup in OIDC auth mode
+	OIDC AuthenticatorType = "oidc"
+	// Webhook represent cluster setup in wehhook auth mode
+	Webhook AuthenticatorType = "webhook"
+)
+
 // AADProfile specifies attributes for AAD integration
 type AADProfile struct {
 	// The client AAD application ID.
 	ClientAppID string `json:"clientAppID,omitempty"`
 	// The server AAD application ID.
 	ServerAppID string `json:"serverAppID,omitempty"`
+	// The server AAD application secret
+	ServerAppSecret string `json:"serverAppSecret,omitempty" conform:"redact"`
 	// The AAD tenant ID to use for authentication.
 	// If not specified, will use the tenant of the deployment subscription.
 	// Optional
@@ -428,6 +555,8 @@ type AADProfile struct {
 	// cluster-admin RBAC role.
 	// Optional
 	AdminGroupID string `json:"adminGroupID,omitempty"`
+	// The authenticator to use, either "oidc" or "webhook".
+	Authenticator AuthenticatorType `json:"authenticator"`
 }
 
 // CustomProfile specifies custom properties that are used for
@@ -484,6 +613,14 @@ type V20170831ARMManagedContainerService struct {
 	*v20170831.ManagedCluster
 }
 
+// V20180331ARMManagedContainerService is the type we read and write from file
+// needed because the json that is sent to ARM and acs-engine
+// is different from the json that the ACS RP Api gets from ARM
+type V20180331ARMManagedContainerService struct {
+	TypeMeta
+	*v20180331.ManagedCluster
+}
+
 // HasWindows returns true if the cluster contains windows
 func (p *Properties) HasWindows() bool {
 	for _, agentPoolProfile := range p.AgentPoolProfiles {
@@ -504,16 +641,47 @@ func (p *Properties) HasManagedDisks() bool {
 			return true
 		}
 	}
+	if p.OrchestratorProfile != nil && p.OrchestratorProfile.KubernetesConfig != nil && p.OrchestratorProfile.KubernetesConfig.PrivateJumpboxProvision() && p.OrchestratorProfile.KubernetesConfig.PrivateCluster.JumpboxProfile.StorageProfile == ManagedDisks {
+		return true
+	}
 	return false
 }
 
 // HasStorageAccountDisks returns true if the cluster contains Storage Account Disks
 func (p *Properties) HasStorageAccountDisks() bool {
+	if p.OrchestratorProfile != nil && p.OrchestratorProfile.OrchestratorType == OpenShift {
+		return true
+	}
 	if p.MasterProfile != nil && p.MasterProfile.StorageProfile == StorageAccount {
 		return true
 	}
 	for _, agentPoolProfile := range p.AgentPoolProfiles {
 		if agentPoolProfile.StorageProfile == StorageAccount {
+			return true
+		}
+	}
+	if p.OrchestratorProfile != nil && p.OrchestratorProfile.KubernetesConfig != nil && p.OrchestratorProfile.KubernetesConfig.PrivateJumpboxProvision() && p.OrchestratorProfile.KubernetesConfig.PrivateCluster.JumpboxProfile.StorageProfile == StorageAccount {
+		return true
+	}
+	return false
+}
+
+// TotalNodes returns the total number of nodes in the cluster configuration
+func (p *Properties) TotalNodes() int {
+	var totalNodes int
+	if p.MasterProfile != nil {
+		totalNodes = p.MasterProfile.Count
+	}
+	for _, pool := range p.AgentPoolProfiles {
+		totalNodes = totalNodes + pool.Count
+	}
+	return totalNodes
+}
+
+// HasVirtualMachineScaleSets returns true if the cluster contains Virtual Machine Scale Sets
+func (p *Properties) HasVirtualMachineScaleSets() bool {
+	for _, agentPoolProfile := range p.AgentPoolProfiles {
+		if agentPoolProfile.AvailabilityProfile == VirtualMachineScaleSets {
 			return true
 		}
 	}
@@ -575,6 +743,16 @@ func (a *AgentPoolProfile) IsAvailabilitySets() bool {
 	return a.AvailabilityProfile == AvailabilitySet
 }
 
+// IsVirtualMachineScaleSets returns true if the agent pool availability profile is VMSS
+func (a *AgentPoolProfile) IsVirtualMachineScaleSets() bool {
+	return a.AvailabilityProfile == VirtualMachineScaleSets
+}
+
+// IsLowPriorityScaleSet returns true if the VMSS is Low Priority
+func (a *AgentPoolProfile) IsLowPriorityScaleSet() bool {
+	return a.AvailabilityProfile == VirtualMachineScaleSets && a.ScaleSetPriority == ScaleSetPriorityLow
+}
+
 // IsManagedDisks returns true if the customer specified disks
 func (a *AgentPoolProfile) IsManagedDisks() bool {
 	return a.StorageProfile == ManagedDisks
@@ -605,6 +783,26 @@ func (l *LinuxProfile) HasSecrets() bool {
 	return len(l.Secrets) > 0
 }
 
+// HasSearchDomain returns true if the customer specified secrets to install
+func (l *LinuxProfile) HasSearchDomain() bool {
+	if l.CustomSearchDomain != nil {
+		if l.CustomSearchDomain.Name != "" && l.CustomSearchDomain.RealmPassword != "" && l.CustomSearchDomain.RealmUser != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasCustomNodesDNS returns true if the customer specified a dns server
+func (l *LinuxProfile) HasCustomNodesDNS() bool {
+	if l.CustomNodesDNS != nil {
+		if l.CustomNodesDNS.DNSServer != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // IsSwarmMode returns true if this template is for Swarm Mode orchestrator
 func (o *OrchestratorProfile) IsSwarmMode() bool {
 	return o.OrchestratorType == SwarmMode
@@ -615,16 +813,32 @@ func (o *OrchestratorProfile) IsKubernetes() bool {
 	return o.OrchestratorType == Kubernetes
 }
 
+// IsOpenShift returns true if this template is for OpenShift orchestrator
+func (o *OrchestratorProfile) IsOpenShift() bool {
+	return o.OrchestratorType == OpenShift
+}
+
 // IsDCOS returns true if this template is for DCOS orchestrator
 func (o *OrchestratorProfile) IsDCOS() bool {
 	return o.OrchestratorType == DCOS
 }
 
-// IsAzureCNI returns true if Azure VNET integration is enabled
+// IsAzureCNI returns true if Azure CNI network plugin is enabled
 func (o *OrchestratorProfile) IsAzureCNI() bool {
+	if o.KubernetesConfig != nil {
+		return o.KubernetesConfig.NetworkPlugin == "azure"
+	}
+	return false
+}
+
+// RequireRouteTable returns true if this deployment requires routing table
+func (o *OrchestratorProfile) RequireRouteTable() bool {
 	switch o.OrchestratorType {
 	case Kubernetes:
-		return o.KubernetesConfig.NetworkPolicy == "azure"
+		if o.IsAzureCNI() || "cilium" == o.KubernetesConfig.NetworkPolicy {
+			return false
+		}
+		return true
 	default:
 		return false
 	}
@@ -637,15 +851,36 @@ func (p *Properties) HasAadProfile() bool {
 
 // GetAPIServerEtcdAPIVersion Used to set apiserver's etcdapi version
 func (o *OrchestratorProfile) GetAPIServerEtcdAPIVersion() string {
-	ret := "etcd3"
 	if o.KubernetesConfig != nil {
 		// if we are here, version has already been validated..
-		etcdversion, _ := semver.NewVersion(o.KubernetesConfig.EtcdVersion)
-		if etcdversion != nil && 2 == etcdversion.Major() {
-			return "etcd2"
+		etcdVersion, _ := semver.Make(o.KubernetesConfig.EtcdVersion)
+		return "etcd" + strconv.FormatUint(etcdVersion.Major, 10)
+	}
+	return ""
+}
+
+// IsMetricsServerEnabled checks if the metrics server addon is enabled
+func (o *OrchestratorProfile) IsMetricsServerEnabled() bool {
+	var metricsServerAddon KubernetesAddon
+	k := o.KubernetesConfig
+	for i := range k.Addons {
+		if k.Addons[i].Name == DefaultMetricsServerAddonName {
+			metricsServerAddon = k.Addons[i]
 		}
 	}
-	return ret
+	return metricsServerAddon.IsEnabled(DefaultMetricsServerAddonEnabled || common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.9.0"))
+}
+
+// IsContainerMonitoringEnabled checks if the container monitoring addon is enabled
+func (o *OrchestratorProfile) IsContainerMonitoringEnabled() bool {
+	var containerMonitoringAddon KubernetesAddon
+	k := o.KubernetesConfig
+	for i := range k.Addons {
+		if k.Addons[i].Name == ContainerMonitoringAddonName {
+			containerMonitoringAddon = k.Addons[i]
+		}
+	}
+	return containerMonitoringAddon.IsEnabled(DefaultContainerMonitoringAddonEnabled)
 }
 
 // IsTillerEnabled checks if the tiller addon is enabled
@@ -670,6 +905,17 @@ func (k *KubernetesConfig) IsACIConnectorEnabled() bool {
 	return aciConnectorAddon.IsEnabled(DefaultACIConnectorAddonEnabled)
 }
 
+// IsClusterAutoscalerEnabled checks if the cluster autoscaler addon is enabled
+func (k *KubernetesConfig) IsClusterAutoscalerEnabled() bool {
+	var clusterAutoscalerAddon KubernetesAddon
+	for i := range k.Addons {
+		if k.Addons[i].Name == DefaultClusterAutoscalerAddonName {
+			clusterAutoscalerAddon = k.Addons[i]
+		}
+	}
+	return clusterAutoscalerAddon.IsEnabled(DefaultClusterAutoscalerAddonEnabled)
+}
+
 // IsDashboardEnabled checks if the kubernetes-dashboard addon is enabled
 func (k *KubernetesConfig) IsDashboardEnabled() bool {
 	var dashboardAddon KubernetesAddon
@@ -681,6 +927,39 @@ func (k *KubernetesConfig) IsDashboardEnabled() bool {
 	return dashboardAddon.IsEnabled(DefaultDashboardAddonEnabled)
 }
 
+func isNSeriesSKU(p *Properties) bool {
+	for _, profile := range p.AgentPoolProfiles {
+		if strings.Contains(profile.VMSize, "Standard_N") {
+			return true
+		}
+	}
+	return false
+}
+
+// IsNVIDIADevicePluginEnabled checks if the NVIDIA Device Plugin addon is enabled
+// It is enabled by default if agents contain a GPU and Kubernetes version is >= 1.10.0
+func (p *Properties) IsNVIDIADevicePluginEnabled() bool {
+	var nvidiaDevicePluginAddon KubernetesAddon
+	k := p.OrchestratorProfile.KubernetesConfig
+	o := p.OrchestratorProfile
+	for i := range k.Addons {
+		if k.Addons[i].Name == NVIDIADevicePluginAddonName {
+			nvidiaDevicePluginAddon = k.Addons[i]
+		}
+	}
+
+	var addonEnabled bool
+	if nvidiaDevicePluginAddon.Enabled != nil && !*nvidiaDevicePluginAddon.Enabled {
+		addonEnabled = false
+	} else if isNSeriesSKU(p) && common.IsKubernetesVersionGe(o.OrchestratorVersion, "1.10.0") {
+		addonEnabled = true
+	} else {
+		addonEnabled = false
+	}
+
+	return nvidiaDevicePluginAddon.IsEnabled(addonEnabled)
+}
+
 // IsReschedulerEnabled checks if the rescheduler addon is enabled
 func (k *KubernetesConfig) IsReschedulerEnabled() bool {
 	var reschedulerAddon KubernetesAddon
@@ -690,4 +969,18 @@ func (k *KubernetesConfig) IsReschedulerEnabled() bool {
 		}
 	}
 	return reschedulerAddon.IsEnabled(DefaultReschedulerAddonEnabled)
+}
+
+// PrivateJumpboxProvision checks if a private cluster has jumpbox auto-provisioning
+func (k *KubernetesConfig) PrivateJumpboxProvision() bool {
+	if k != nil && k.PrivateCluster != nil && *k.PrivateCluster.Enabled && k.PrivateCluster.JumpboxProfile != nil {
+		return true
+	}
+	return false
+}
+
+// RequiresDocker returns if the kubernetes settings require docker to be installed.
+func (k *KubernetesConfig) RequiresDocker() bool {
+	runtime := strings.ToLower(k.ContainerRuntime)
+	return runtime == "docker" || runtime == ""
 }
