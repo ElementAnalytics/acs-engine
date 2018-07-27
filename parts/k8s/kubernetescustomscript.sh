@@ -62,9 +62,7 @@ else
 fi
 
 function testOutboundConnection() {
-    retrycmd_if_failure 20 1 3 nc -v www.google.com 443 \
-        || retrycmd_if_failure 20 1 3 nc -v www.1688.com 443 \
-        || exit $ERR_OUTBOUND_CONN_FAIL
+    retrycmd_if_failure 20 1 3 nc -v www.google.com 443 || retrycmd_if_failure 20 1 3 nc -v www.1688.com 443 || exit $ERR_OUTBOUND_CONN_FAIL
 }
 
 function waitForCloudInit() {
